@@ -1,17 +1,14 @@
-from typing import Any, Dict, Optional
+from enum import Enum
+from typing import Any, Dict, Literal, Optional
 
 import aiohttp
-
-from enum import Enum
-from typing import Literal, Optional
-
-from pydantic import BaseModel, Field
-
 from loguru import logger
+from pydantic import BaseModel, Field
 
 
 class AvatarQuality(str, Enum):
     """Enum representing different avatar quality levels."""
+
     low = "low"
     medium = "medium"
     high = "high"
@@ -19,6 +16,7 @@ class AvatarQuality(str, Enum):
 
 class VoiceEmotion(str, Enum):
     """Enum representing different voice emotion types."""
+
     EXCITED = "excited"
     SERIOUS = "serious"
     FRIENDLY = "friendly"
@@ -28,6 +26,7 @@ class VoiceEmotion(str, Enum):
 
 class ElevenLabsSettings(BaseModel):
     """Settings for ElevenLabs voice configuration."""
+
     stability: Optional[float] = None
     similarity_boost: Optional[float] = None
     style: Optional[int] = None
@@ -36,6 +35,7 @@ class ElevenLabsSettings(BaseModel):
 
 class VoiceSettings(BaseModel):
     """Voice configuration settings."""
+
     voice_id: Optional[str] = Field(None, alias="voiceId")
     rate: Optional[float] = None
     emotion: Optional[VoiceEmotion] = None
@@ -44,6 +44,7 @@ class VoiceSettings(BaseModel):
 
 class NewSessionRequest(BaseModel):
     """Request model for creating a new HeyGen session."""
+
     avatarName: str
     quality: Optional[AvatarQuality] = None
     knowledgeId: Optional[str] = None
@@ -56,42 +57,43 @@ class NewSessionRequest(BaseModel):
     disableIdleTimeout: Optional[bool] = None
 
 
-class SessionResponse(BaseModel):
+class HeyGenSession(BaseModel):
     """Response model for a HeyGen session."""
+
     session_id: str
     access_token: str
     realtime_endpoint: str
     url: str
 
 
-class HeygenAPIError(Exception):
+class HeygenApiError(Exception):
     """Custom exception for HeyGen API errors."""
+
     def __init__(self, message: str, status: int, response_text: str) -> None:
-        """
-        Args:
-            message: Error message
-            status: HTTP status code
-            response_text: Raw response text from the API
+        """Args:
+        message: Error message
+        status: HTTP status code
+        response_text: Raw response text from the API
         """
         super().__init__(message)
         self.status = status
         self.response_text = response_text
 
 
-class HeygenApi:
+class HeyGenApi:
     """HeyGen Streaming API client."""
+
     BASE_URL = "https://api.heygen.com/v1"
 
-    def __init__(self, api_key: str, session: Optional[aiohttp.ClientSession] = None) -> None:
-        """
-        Args:
-            api_key: HeyGen API key
-            session: Optional aiohttp client session
+    def __init__(self, api_key: str, session: aiohttp.ClientSession) -> None:
+        """Args:
+        api_key: HeyGen API key
+        session: Optional aiohttp client session
         """
         self.api_key = api_key
-        self.session = session or aiohttp.ClientSession()
+        self.session = session
 
-    async def request(self, path: str, params: Dict[str, Any]) -> Any:
+    async def _request(self, path: str, params: Dict[str, Any]) -> Any:
         """Make a POST request to the HeyGen API.
 
         Args:
@@ -102,7 +104,7 @@ class HeygenApi:
             Parsed JSON response data
 
         Raises:
-            HeygenAPIError: If the API response is not successful or data is missing
+            HeygenApiError: If the API response is not successful or data is missing
             aiohttp.ClientError: For network-related errors
         """
         url = f"{self.BASE_URL}{path}"
@@ -111,12 +113,14 @@ class HeygenApi:
             "Content-Type": "application/json",
         }
 
+        logger.debug(f"HeyGen API request: {url}")
+
         try:
             async with self.session.post(url, json=params, headers=headers) as response:
                 if not response.ok:
                     response_text = await response.text()
                     logger.error(f"HeyGen API error: {response_text}")
-                    raise HeygenAPIError(
+                    raise HeygenApiError(
                         f"API request failed with status {response.status}",
                         response.status,
                         response_text,
@@ -124,17 +128,15 @@ class HeygenApi:
                 json_data = await response.json()
                 data = json_data.get("data")
                 if data is None:
-                    raise HeygenAPIError(
-                        "API response missing 'data' field",
-                        response.status,
-                        str(json_data)
+                    raise HeygenApiError(
+                        "API response missing 'data' field", response.status, str(json_data)
                     )
                 return data
         except aiohttp.ClientError as e:
             logger.error(f"Network error while calling HeyGen API: {str(e)}")
             raise
 
-    async def new_session(self, request_data: NewSessionRequest) -> SessionResponse:
+    async def new_session(self, request_data: NewSessionRequest) -> HeyGenSession:
         """Create a new streaming session.
         https://docs.heygen.com/reference/new-session
 
@@ -154,9 +156,7 @@ class HeygenApi:
                 "rate": request_data.voice.rate if request_data.voice else None,
                 "emotion": request_data.voice.emotion if request_data.voice else None,
                 "elevenlabs_settings": (
-                    request_data.voice.elevenlabsSettings
-                    if request_data.voice
-                    else None
+                    request_data.voice.elevenlabsSettings if request_data.voice else None
                 ),
             },
             "language": request_data.language,
@@ -165,10 +165,10 @@ class HeygenApi:
             "source": "sdk",
             "disable_idle_timeout": request_data.disableIdleTimeout,
         }
-        session_info = await self.request("/streaming.new", params)
+        session_info = await self._request("/streaming.new", params)
         print("heygen session info", session_info)
 
-        return SessionResponse.model_validate(session_info)
+        return HeyGenSession.model_validate(session_info)
 
     async def start_session(self, session_id: str) -> Any:
         """Start the streaming session.
@@ -189,8 +189,25 @@ class HeygenApi:
         params = {
             "session_id": session_id,
         }
-        return await self.request("/streaming.start", params)
+        return await self._request("/streaming.start", params)
 
-    async def close(self) -> None:
-        """Close the aiohttp session."""
-        await self.session.close()
+    async def close_session(self, session_id: str) -> Any:
+        """Terminate an active the streaming session.
+        https://docs.heygen.com/reference/close-session
+
+        Args:
+            session_id: ID of the session to stop
+
+        Returns:
+            Response data from the stop session API call
+
+        Raises:
+            ValueError: If session ID is not set
+        """
+        if not session_id:
+            raise ValueError("Session ID is not set. Call new_session first.")
+
+        params = {
+            "session_id": session_id,
+        }
+        return await self._request("/streaming.stop", params)
