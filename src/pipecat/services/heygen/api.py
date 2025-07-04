@@ -93,18 +93,19 @@ class HeyGenApi:
         self.api_key = api_key
         self.session = session
 
-    async def _request(self, path: str, params: Dict[str, Any]) -> Any:
+    async def _request(self, path: str, params: Dict[str, Any], expect_data: bool = True) -> Any:
         """Make a POST request to the HeyGen API.
 
         Args:
             path: API endpoint path
             params: JSON-serializable parameters
+            expect_data: Whether to expect and extract 'data' field from response (default: True)
 
         Returns:
             Parsed JSON response data
 
         Raises:
-            HeygenApiError: If the API response is not successful or data is missing
+            HeygenApiError: If the API response is not successful or data is missing when expected
             aiohttp.ClientError: For network-related errors
         """
         url = f"{self.BASE_URL}{path}"
@@ -125,13 +126,11 @@ class HeyGenApi:
                         response.status,
                         response_text,
                     )
-                json_data = await response.json()
-                data = json_data.get("data")
-                if data is None:
-                    raise HeygenApiError(
-                        "API response missing 'data' field", response.status, str(json_data)
-                    )
-                return data
+                if expect_data:
+                    json_data = await response.json()
+                    data = json_data.get("data")
+                    return data
+                return await response.text()
         except aiohttp.ClientError as e:
             logger.error(f"Network error while calling HeyGen API: {str(e)}")
             raise
@@ -210,4 +209,4 @@ class HeyGenApi:
         params = {
             "session_id": session_id,
         }
-        return await self._request("/streaming.stop", params)
+        return await self._request("/streaming.stop", params, expect_data=False)

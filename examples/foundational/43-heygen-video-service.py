@@ -12,8 +12,6 @@ import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
 
-from pipecat.services.heygen.api import HeyGenApi, NewSessionRequest, HeyGenSession
-
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
@@ -22,6 +20,7 @@ from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.google.llm import GoogleLLMService
+from pipecat.services.heygen.api import HeyGenApi, HeyGenSession, NewSessionRequest
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.services.daily import DailyParams
 
