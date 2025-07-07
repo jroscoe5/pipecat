@@ -16,15 +16,14 @@ from fastapi import WebSocket
 from loguru import logger
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.frames.frames import LLMMessagesAppendFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.serializers.twilio import TwilioFrameSerializer
-from pipecat.services.cartesia.tts import CartesiaTTSService
-from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.gemini_multimodal_live.gemini import GeminiMultimodalLiveLLMService
 from pipecat.transports.network.fastapi_websocket import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
@@ -68,20 +67,12 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
             audio_in_enabled=True,
             audio_out_enabled=True,
             add_wav_header=False,
-            vad_analyzer=SileroVADAnalyzer(),
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.5)),
             serializer=serializer,
         ),
     )
 
-    llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"))
-    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"), audio_passthrough=True)
-    tts = CartesiaTTSService(
-        api_key=os.getenv("CARTESIA_API_KEY"),
-        voice_id="bf0a246a-8642-498a-9950-80c35e9276b5",  #"008fa54c-4d6c-4cde-85a1-d450fe476085",#"bf0a246a-8642-498a-9950-80c35e9276b5",  # British Reading Lady
-        push_silence_after_stop=testing,
-    )
-
-    import datetime
+    # Create the Gemini Multimodal Live LLM service
     system_instruction = fr"""
  Purpose: You are Ellipse and you are pleased to share information about how you can help apartment community owners, property managers and staff to respond to all leads/prospective tenant inquiries and schedule tours by phone, text or email, 24 hours a day, seven days a week. Additionally You do not answer any questions that are not related to this.
 
@@ -182,16 +173,12 @@ You can schedule tours for the following times: Monday through Friday from 10:00
 When they are ready to schedule, ask for their preferred date and time, a name, and a phone number to confirm the booking.
 """
 
-
-    messages = [
-        {
-            "role": "system",
-            "content": system_instruction,
-        },
-    ]
-
-    context = OpenAILLMContext(messages)
-    context_aggregator = llm.create_context_aggregator(context)
+    llm = GeminiMultimodalLiveLLMService(
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        system_instruction=system_instruction,
+        voice_id="Kore",  # Options: Aoede, Charon, Fenrir, Kore, Puck
+        model="models/gemini-2.0-flash-live-001",  # Using Flash model for lower latency
+    )
 
     # NOTE: Watch out! This will save all the conversation in memory. You can
     # pass `buffer_size` to get periodic callbacks.
@@ -200,21 +187,17 @@ When they are ready to schedule, ask for their preferred date and time, a name, 
     pipeline = Pipeline(
         [
             transport.input(),  # Websocket input from client
-            stt,  # Speech-To-Text
-            context_aggregator.user(),
-            llm,  # LLM
-            tts,  # Text-To-Speech
+            llm,  # Gemini Multimodal Live handles both STT and TTS
             transport.output(),  # Websocket output to client
             audiobuffer,  # Used to buffer the audio in the pipeline
-            context_aggregator.assistant(),
         ]
     )
 
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
-            audio_in_sample_rate=8000,
-            audio_out_sample_rate=8000,
+            audio_in_sample_rate=8000,  # Twilio uses 8kHz
+            audio_out_sample_rate=8000,  # Twilio uses 8kHz
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
@@ -225,8 +208,18 @@ When they are ready to schedule, ask for their preferred date and time, a name, 
         # Start recording.
         await audiobuffer.start_recording()
         # Kick off the conversation.
-        messages.append({"role": "system", "content": "Please introduce yourself to the user."})
-        await task.queue_frames([context_aggregator.user().get_context_frame()])
+        await task.queue_frames(
+            [
+                LLMMessagesAppendFrame(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": "Greet the caller warmly and ask how you can help them today.",
+                        }
+                    ]
+                )
+            ]
+        )
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
