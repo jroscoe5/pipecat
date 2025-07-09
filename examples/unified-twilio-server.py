@@ -164,4 +164,4 @@ if __name__ == "__main__":
     print(f"  OpenAI: {SERVER_URL}/ws/openai")
     print(f"  Gemini: {SERVER_URL}/ws/gemini")
     
-    uvicorn.run(app, host="0.0.0.0", port=8765)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
