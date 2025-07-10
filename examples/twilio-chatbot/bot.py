@@ -29,6 +29,10 @@ from pipecat.transports.network.fastapi_websocket import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
 )
+from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.services.llm_service import FunctionCallParams
+from pipecat.frames.frames import EndFrame, TTSSpeakFrame
 
 load_dotenv(override=True)
 
@@ -73,7 +77,33 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
         ),
     )
 
-    llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"), params=OpenAILLMService.InputParams(temperature=0.7))
+    # Define the hang up function schema
+    hang_up_function = FunctionSchema(
+        name="hang_up_call",
+        description="End the phone call when the user requests to hang up or says goodbye",
+        properties={},
+        required=[],
+    )
+    tools = ToolsSchema(standard_tools=[hang_up_function])
+
+    llm = OpenAILLMService(
+        api_key=os.getenv("OPENAI_API_KEY"), 
+        params=OpenAILLMService.InputParams(temperature=0.7),
+        tools=tools
+    )
+
+    # Define the hang up function
+    async def hang_up_call(params: FunctionCallParams):
+        logger.info("User requested to hang up the call")
+        # First acknowledge the request
+        await tts.queue_frame(TTSSpeakFrame("Goodbye! Thank you for calling."))
+        # Return result to complete the function call
+        await params.result_callback({"status": "ending_call"})
+        # Push EndFrame to trigger Twilio auto-hangup
+        await task.queue_frames([EndFrame()])
+
+    # Register the function with the LLM
+    llm.register_function("hang_up_call", hang_up_call)
     stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"), audio_passthrough=True)
     tts = CartesiaTTSService(
         api_key=os.getenv("CARTESIA_API_KEY"),
@@ -119,6 +149,14 @@ Keep the current date and time handy
 Be helpful but redirect unrelated questions politely
 Sound natural, not like you're reading from a script
 </Natural Conversation Rules>
+
+<Call Control>
+You have the ability to end the phone call when requested. If the user:
+- Explicitly asks to hang up or end the call
+- Says goodbye in a way that indicates they want to end the conversation
+- Says they're done or finished talking
+Then use the hang_up_call function to end the call gracefully.
+</Call Control>
 </</Conversation Guidelines>>
 
 <<Information for Responses>>

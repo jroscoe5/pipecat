@@ -17,7 +17,7 @@ from loguru import logger
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import LLMMessagesAppendFrame
+from pipecat.frames.frames import LLMMessagesAppendFrame, EndFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -28,6 +28,9 @@ from pipecat.transports.network.fastapi_websocket import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
 )
+from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.services.llm_service import FunctionCallParams
 
 load_dotenv(override=True)
 
@@ -107,6 +110,14 @@ Keep the current date and time handy
 Be helpful but redirect unrelated questions politely
 Sound natural, not like you're reading from a script
 </Natural Conversation Rules>
+
+<Call Control>
+You have the ability to end the phone call when requested. If the user:
+- Explicitly asks to hang up or end the call
+- Says goodbye in a way that indicates they want to end the conversation
+- Says they're done or finished talking
+Then use the hang_up_call function to end the call gracefully. Always say goodbye before ending the call.
+</Call Control>
 </</Conversation Guidelines>>
 
 <<Information for Responses>>
@@ -207,12 +218,33 @@ Say: "Ellipse acts like a dedicated team member who's always available to answer
 </</Example Responses>>
 """
 
+    # Define the hang up function schema
+    hang_up_function = FunctionSchema(
+        name="hang_up_call",
+        description="End the phone call when the user requests to hang up or says goodbye",
+        properties={},
+        required=[],
+    )
+    tools = ToolsSchema(standard_tools=[hang_up_function])
+
     llm = GeminiMultimodalLiveLLMService(
         api_key=os.getenv("GOOGLE_API_KEY"),
         system_instruction=system_instruction,
         voice_id="Kore",  # Options: Aoede, Charon, Fenrir, Kore, Puck
         model="models/gemini-2.0-flash-live-001",  # Using Flash model for lower latency
+        tools=tools,
     )
+
+    # Define the hang up function
+    async def hang_up_call(params: FunctionCallParams):
+        logger.info("User requested to hang up the call")
+        # Return result to complete the function call
+        await params.result_callback({"status": "ending_call", "message": "Call ended successfully"})
+        # Push EndFrame to trigger Twilio auto-hangup
+        await task.queue_frames([EndFrame()])
+
+    # Register the function with the LLM
+    llm.register_function("hang_up_call", hang_up_call)
 
     # NOTE: Watch out! This will save all the conversation in memory. You can
     # pass `buffer_size` to get periodic callbacks.
