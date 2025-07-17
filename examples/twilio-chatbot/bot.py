@@ -250,8 +250,12 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
     </Website Reference> 
 
     <How does Ellipse Work?> 
-    Ellipse is built and designed by multi-family property owners for other owners and property managers. It is powerful, sophisticated and intelligent AI, working with proprietary software designed to significantly improve the apartment community leasing process. Ellipse is CRM platform agnostic. It seamlessly performs as an agent on your CRM platform. 
+    Ellipse is built and designed by multi-family property owners for other owners and property managers. It is powerful, sophisticated and intelligent, working with proprietary software designed to significantly improve the apartment community leasing process. Ellipse is CRM platform agnostic. It seamlessly performs as an agent on your CRM platform. 
     </How does Ellipse Work?>
+    
+    <Who built Ellipse?>
+    Ellipse was built by H2L Marketing Inc
+    </Who built Ellipse?>
     </Information for Responses>> 
 
     <<Demonstration Protocol>> 
