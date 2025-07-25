@@ -45,6 +45,7 @@ def import_bot_module(path, module_name):
 # Import the bot functions from both examples
 openai_bot = import_bot_module(os.path.join(script_dir, 'twilio-chatbot', 'bot.py'), 'openai_bot')
 gemini_bot = import_bot_module(os.path.join(script_dir, 'twilio-gemini-live', 'bot.py'), 'gemini_bot')
+demo_bot = import_bot_module(os.path.join(script_dir, 'twilio-chatbot', 'bot_demo_only.py'), 'demo_bot')
 
 app = FastAPI()
 
@@ -128,10 +129,42 @@ async def gemini_websocket_endpoint(websocket: WebSocket):
     await gemini_bot.run_bot(websocket, stream_sid, call_sid, app.state.testing)
 
 
+# Demo bot endpoints
+@app.post("/demo")
+async def start_demo_call():
+    print("POST TwiML for Demo bot")
+    print(f"Using SERVER_URL: {SERVER_URL}")
+    # Return TwiML that points to the Demo WebSocket endpoint
+    twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="{SERVER_URL}/ws/demo"></Stream>
+  </Connect>
+  <Pause length="40"/>
+</Response>'''
+    print(f"Returning TwiML: {twiml}")
+    return HTMLResponse(content=twiml, media_type="application/xml")
+
+
+@app.websocket("/ws/demo")
+async def demo_websocket_endpoint(websocket: WebSocket):
+    print("Demo WebSocket connection attempt")
+    await websocket.accept()
+    print("Demo WebSocket accepted")
+    start_data = websocket.iter_text()
+    await start_data.__anext__()
+    call_data = json.loads(await start_data.__anext__())
+    print(f"Demo Bot - Call Data: {call_data}", flush=True)
+    stream_sid = call_data["start"]["streamSid"]
+    call_sid = call_data["start"]["callSid"]
+    print("Demo Bot - WebSocket connection accepted")
+    await demo_bot.run_bot(websocket, stream_sid, call_sid, app.state.testing)
+
+
 # Root endpoint for health checks
 @app.get("/")
 async def root():
-    return {"status": "healthy", "bots": ["openai", "gemini"], "server_url": SERVER_URL}
+    return {"status": "healthy", "bots": ["openai", "gemini", "demo"], "server_url": SERVER_URL}
 
 # Test endpoint to return simple TwiML
 @app.post("/test")
@@ -160,8 +193,10 @@ if __name__ == "__main__":
     print("\nConfigure your Twilio phone numbers:")
     print(f"  OpenAI bot webhook: {SERVER_URL.replace('wss://', 'https://')}/openai")
     print(f"  Gemini bot webhook: {SERVER_URL.replace('wss://', 'https://')}/gemini")
+    print(f"  Demo bot webhook: {SERVER_URL.replace('wss://', 'https://')}/demo")
     print("\nWebSocket endpoints:")
     print(f"  OpenAI: {SERVER_URL}/ws/openai")
     print(f"  Gemini: {SERVER_URL}/ws/gemini")
+    print(f"  Demo: {SERVER_URL}/ws/demo")
     
     uvicorn.run(app, host="0.0.0.0", port=8000)

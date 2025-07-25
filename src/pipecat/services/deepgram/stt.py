@@ -92,7 +92,7 @@ class DeepgramSTTService(STTService):
 
         default_options = LiveOptions(
             encoding="linear16",
-            language=Language.EN,
+            language='multi',
             model="nova-3-general",
             channels=1,
             interim_results=True,
