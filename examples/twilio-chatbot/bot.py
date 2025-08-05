@@ -134,7 +134,7 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
         context.set_messages(messages_list)
         
         # Acknowledge in Spanish
-        await tts.queue_frame(TTSSpeakFrame("Perfecto, continuemos en español."))
+        # await tts.queue_frame(TTSSpeakFrame("Perfecto, continuemos en español."))
         
         # Return result to complete the function call
         await params.result_callback({"status": "switched_to_spanish"})
@@ -154,7 +154,7 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
         context.set_messages(messages_list)
         
         # Acknowledge in English
-        await tts.queue_frame(TTSSpeakFrame("Great! Let's continue in English."))
+        # await tts.queue_frame(TTSSpeakFrame("Great! Let's continue in English."))
         
         # Return result to complete the function call
         await params.result_callback({"status": "switched_to_english"})
