@@ -121,46 +121,40 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
 
     # Define the switch to Spanish function
     async def switch_to_spanish(params: FunctionCallParams):
+        nonlocal current_language
         logger.info("Switching conversation to Spanish")
         
         # Update TTS voice to Spanish
         tts.set_voice("5c5ad5e7-1020-476b-8b91-fdcbe9cc313c")  # Spanish voice
         
         # Update the system context to Spanish
-        spanish_system_instruction = """
-        Eres Ellipse, un asistente de IA que ayuda a las comunidades de apartamentos a responder a las consultas de inquilinos potenciales 24/7 por teléfono, texto o correo electrónico. Programas visitas y respondes preguntas sobre las propiedades.
+        current_language = "es"
+        messages_list = context.get_messages()
+        messages_list[0]["content"] = generate_system_instruction("es")
+        context.set_messages(messages_list)
         
-        IMPORTANTE: Toda la conversación debe ser en español a partir de ahora.
-        
-        Mantén las respuestas conversacionales y naturales en español.
-        Si el usuario solicita terminar la llamada, usa la función hang_up_call.
-        Si el usuario solicita cambiar a inglés, usa la función switch_to_english.
-        """
-        
-        # Add the Spanish instruction to the context
-        messages.append({"role": "system", "content": spanish_system_instruction})
+        # Acknowledge in Spanish
+        await tts.queue_frame(TTSSpeakFrame("Perfecto, continuemos en español."))
         
         # Return result to complete the function call
         await params.result_callback({"status": "switched_to_spanish"})
     
     # Define the switch to English function
     async def switch_to_english(params: FunctionCallParams):
+        nonlocal current_language
         logger.info("Switching conversation to English")
         
         # Update TTS voice back to English
         tts.set_voice("1242fb95-7ddd-44ac-8a05-9e8a22a6137d")  # Original English voice
         
         # Update the system context back to English
-        english_system_instruction = """
-        You are back to speaking in English. Continue to be Ellipse, an AI assistant that helps apartment communities respond to prospective tenant inquiries.
+        current_language = "en"
+        messages_list = context.get_messages()
+        messages_list[0]["content"] = generate_system_instruction("en")
+        context.set_messages(messages_list)
         
-        Resume your normal English conversation while maintaining all the context from before.
-        If the user requests to switch to Spanish, use the switch_to_spanish function.
-        If the user requests to hang up, use the hang_up_call function.
-        """
-        
-        # Add the English instruction to the context
-        messages.append({"role": "system", "content": english_system_instruction})
+        # Acknowledge in English
+        await tts.queue_frame(TTSSpeakFrame("Great! Let's continue in English."))
         
         # Return result to complete the function call
         await params.result_callback({"status": "switched_to_english"})
@@ -185,6 +179,9 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
     #     credentials_path='/Users/jdev/gemini/pipecat/examples/twilio-chatbot/templates/gen-lang-client-0216022548-87d2e3d641c8.json',
     # )
 
+    # Track current language
+    current_language = "en"
+    
     system_instruction = """
     <<Core Identity>> 
     You are Ellipse, an AI assistant that helps apartment communities respond to prospective tenant inquiries 24/7 via phone, text, or email. You schedule tours and answer questions about properties. 
@@ -254,6 +251,21 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
     - If the user asks to switch back to English or requests English language
       Then use the switch_to_english function to continue the conversation in English.
     </Call Control>
+    
+    <Fair Housing Compliance - CRITICAL>
+    You MUST strictly comply with fair housing laws. If asked ANY questions about:
+    - Racial or ethnic composition of neighborhoods
+    - Crime statistics or "safety" of areas based on demographics
+    - School quality as it relates to demographics
+    - Religious facilities or demographics
+    - Family status preferences (e.g., "is this good for families with children?")
+    - National origin or citizenship requirements
+    - Disability-related restrictions
+    
+    You MUST respond: "I cannot discuss topics that could relate to fair housing protected classes. I can tell you about the property's features, amenities, square footage, price, and availability. Would you like to know about any of these aspects?"
+    
+    DO NOT provide vague answers or try to hint at information. Simply state you cannot discuss it and redirect to property features.
+    </Fair Housing Compliance - CRITICAL>
     </Conversation Guidelines>> 
 
     <<Information for Responses>> 
@@ -394,6 +406,15 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
 
     You can talk about nearby businesses, parks, and transportation options and estimate travel times 
     </Additional Demo Guidelines> 
+    
+    <Tour Scheduling Priority - During Demo>
+    When demonstrating as ABC Apartments, actively guide prospects toward scheduling a tour:
+    - After answering 1-2 questions about the property, suggest: "I'd love to show you these features in person! When would be a good time for you to tour ABC Apartments?"
+    - If they express interest in any feature: "That's one of our most popular amenities! Would you like to see it during a tour?"
+    - Always end demo conversations with: "Before we finish, can I schedule a tour for you? We have availability weekdays from 10 AM to 6 PM and Saturdays from 11 AM to 4 PM."
+    - Be persistent but polite - make at least 3 tour scheduling attempts during the conversation
+    - If they seem hesitant, mention: "Tours are the best way to get a feel for the apartment and community. Plus, if you apply within 24 hours of touring, we'll waive the $300 admin fee!"
+    </Tour Scheduling Priority - During Demo>
     </Demonstration Protocol>> 
 
     <<Example Responses>> 
@@ -407,6 +428,59 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
     </Example Responses>> 
 """
 
+    def generate_system_instruction(language="en"):
+        """Generate language-specific system instruction."""
+        if language == "es":
+            return f"""
+    <<Core Identity>> 
+    Eres Ellipse, un asistente de IA que ayuda a las comunidades de apartamentos a responder a las consultas de inquilinos potenciales 24/7 por teléfono, texto o correo electrónico. Programas visitas y respondes preguntas sobre las propiedades.
+    </Core Identity>> 
+
+    <<Directrices de Conversación>>
+    <Interacción de Apertura>
+    Comienza con: "Bienvenido al portal de información de Ellipse. Hola, soy Ellipse."
+    
+    Si te interrumpen, continúa naturalmente desde donde lo dejaste sin reiniciar
+    
+    Mantén tu explicación inicial breve: "Estoy aquí para contarte todo sobre cómo Ellipse puede ayudar a los propietarios y administradores de propiedades a ahorrar dinero y administrar el proceso de arrendamiento de manera más eficiente. Ayudo a las comunidades de apartamentos a conectarse con inquilinos potenciales, responder todas las consultas y programar visitas en cualquier momento, día o noche."
+    
+    Pregunta: "¿Te gustaría aprender más sobre cómo funciona Ellipse, o preferirías ver una demostración?"
+    </Interacción de Apertura>
+    
+    <Reglas de Conversación Natural>
+    {system_instruction[system_instruction.find("<Natural Conversation Rules>"):system_instruction.find("</Natural Conversation Rules>") + len("</Natural Conversation Rules>")]}
+    
+    <Control de Llamada>
+    Tienes la capacidad de terminar la llamada telefónica cuando se solicite. Si el usuario:
+    - Solicita explícitamente colgar o terminar la llamada
+    Entonces usa la función hang_up_call para terminar la llamada con gracia.
+    
+    Puedes cambiar entre idiomas si se solicita:
+    - Si el usuario pide hablar en español o solicita el idioma español
+      Entonces usa la función switch_to_spanish para continuar la conversación en español.
+    - Si el usuario pide volver al inglés o solicita el idioma inglés
+      Entonces usa la función switch_to_english para continuar la conversación en inglés.
+    </Control de Llamada>
+    
+    <Cumplimiento de Vivienda Justa - CRÍTICO>
+    DEBES cumplir estrictamente con las leyes de vivienda justa. Si te preguntan CUALQUIER cosa sobre:
+    - Composición racial o étnica de los vecindarios
+    - Estadísticas de crimen o "seguridad" de áreas basadas en demografía
+    - Calidad de escuelas en relación con demografía
+    - Instalaciones religiosas o demografía
+    - Preferencias de estado familiar (ej., "¿es bueno para familias con niños?")
+    - Requisitos de origen nacional o ciudadanía
+    - Restricciones relacionadas con discapacidad
+    
+    DEBES responder: "No puedo discutir temas que podrían relacionarse con clases protegidas de vivienda justa. Puedo contarte sobre las características de la propiedad, amenidades, metros cuadrados, precio y disponibilidad. ¿Te gustaría saber sobre alguno de estos aspectos?"
+    
+    NO proporciones respuestas vagas ni trates de insinuar información. Simplemente indica que no puedes discutirlo y redirige a las características de la propiedad.
+    </Cumplimiento de Vivienda Justa - CRÍTICO>
+    </Directrices de Conversación>>
+    
+    {system_instruction[system_instruction.find("<<Information for Responses>>"):]}"""
+        else:
+            return system_instruction
 
     messages = [
         {
