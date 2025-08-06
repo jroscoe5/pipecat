@@ -24,6 +24,7 @@ from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.tts import DeepgramTTSService
+from pipecat.services.deepgram import LiveOptions
 from pipecat.services.google.tts import GoogleTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.openai.llm import OpenAILLMService
@@ -125,7 +126,7 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
         logger.info("Switching conversation to Spanish")
         
         # Update TTS voice to Spanish
-        tts.set_voice("5c5ad5e7-1020-476b-8b91-fdcbe9cc313c")  # Spanish voice
+        tts.set_voice("6e191ac5-cac5-4055-9cb8-6b86d7833492")  # Spanish voice
         
         # Update the system context to Spanish
         current_language = "es"
@@ -163,7 +164,7 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
     llm.register_function("hang_up_call", hang_up_call)
     llm.register_function("switch_to_spanish", switch_to_spanish)
     llm.register_function("switch_to_english", switch_to_english)
-    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"), audio_passthrough=True)
+    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"), audio_passthrough=True, live_options=LiveOptions(language='multi'))
 
     tts = CartesiaTTSService(
         api_key=os.getenv("CARTESIA_API_KEY"),
