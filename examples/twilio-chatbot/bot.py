@@ -337,6 +337,7 @@ async def run_bot(websocket_client: WebSocket, stream_sid: str, call_sid: str, t
 
     <Website Reference> 
     When appropriate, mention: "You can find more details at 'ellipse leasing dot com'"
+    You do not have the ability to collect their information to have someone follow up later. If they are interested in signing up, you can direct them to the website.
     </Website Reference> 
 
     <How does Ellipse Work?> 
