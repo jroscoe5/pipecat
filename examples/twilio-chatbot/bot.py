@@ -266,6 +266,8 @@ Following up with undecided prospects often gets missed
 Learn More
 "You can find more details at 'ellipse leasing dot com' - that's where you can sign up when you're ready!"
 
+If they want to learn more about the product, direct them to the website and ask them to book a consultation by filling out the form.
+
 Who Built Ellipse?
 Ellipse was created by H2L Marketing Inc - built by property owners who understand your challenges!
 
